@@ -1,7 +1,7 @@
 {
-  "name": "barnhaus-design-concierge",
+  "name": "barnhaus-mod-concierge",
   "version": "1.0.0",
-  "description": "Barnhaus Design Concierge — conversational AI interview agent",
+  "description": "Barnhaus Mod Concierge — full-page plan customization app with AI concept previews",
   "type": "module",
   "main": "server/index.js",
   "scripts": {
