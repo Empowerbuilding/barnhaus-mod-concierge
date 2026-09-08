@@ -17,6 +17,10 @@ const s = {
   loading: { display: "flex", alignItems: "center", justifyContent: "center", flex: 1, color: "#888", fontFamily: "'Inter',sans-serif", fontSize: 15 },
 };
 
+// Embed mode: the app runs inside a drawer iframe on the Shopify product page.
+// ?embed=1 — slim header, close button that postMessages the parent, no picker nav.
+const IS_EMBED = new URLSearchParams(window.location.search).get("embed") === "1";
+
 export default function App() {
   const [plans, setPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
@@ -24,8 +28,9 @@ export default function App() {
   const [planLoading, setPlanLoading] = useState(false);
   const [logoError, setLogoError] = useState(false);
 
-  // Load plan list
+  // Load plan list (skip in embed mode — plan comes from the deep link)
   useEffect(() => {
+    if (IS_EMBED) { setPlansLoading(false); return; }
     fetch("/api/mod-plans")
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setPlans(data); })
@@ -67,17 +72,25 @@ export default function App() {
 
   const inCustomizer = !!plan;
 
+  const closeEmbed = () => {
+    try { window.parent.postMessage({ type: "modConciergeClose" }, "*"); } catch { /* noop */ }
+  };
+
   return (
-    <div style={{ ...s.app, ...(inCustomizer ? s.appFull : {}) }}>
-      <div style={s.header}>
-        <div style={s.logoWrap} onClick={backToPicker}>
+    <div style={{ ...s.app, ...(inCustomizer || IS_EMBED ? s.appFull : {}) }}>
+      <div style={{ ...s.header, ...(IS_EMBED ? { padding: "10px 16px" } : {}) }}>
+        <div style={{ ...s.logoWrap, ...(IS_EMBED ? { cursor: "default" } : {}) }} onClick={IS_EMBED ? undefined : backToPicker}>
           {!logoError
-            ? <img src={LOGO_URL} alt="Barnhaus Steel Builders" style={s.logoImg} onError={() => setLogoError(true)} />
+            ? <img src={LOGO_URL} alt="Barnhaus Steel Builders" style={{ ...s.logoImg, ...(IS_EMBED ? { height: 28 } : {}) }} onError={() => setLogoError(true)} />
             : <div style={s.logoFallback}>BARN<span style={s.gold}>HAUS</span></div>
           }
           <div style={s.subtitle}>Mod Concierge</div>
         </div>
-        {inCustomizer && (
+        {IS_EMBED ? (
+          <button style={{ ...s.backBtn, fontSize: 15, lineHeight: 1, padding: "8px 14px" }} onClick={closeEmbed} aria-label="Close">
+            ✕
+          </button>
+        ) : inCustomizer && (
           <button style={s.backBtn} onClick={backToPicker}
             onMouseEnter={e => { e.currentTarget.style.borderColor = "#B8860B"; e.currentTarget.style.color = "#DAA520"; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = "#3a3a3a"; e.currentTarget.style.color = "#aaa"; }}>
@@ -90,6 +103,8 @@ export default function App() {
         <div style={s.loading}>Loading plan…</div>
       ) : inCustomizer ? (
         <Customizer key={plan.handle} plan={plan} />
+      ) : IS_EMBED ? (
+        <div style={s.loading}>No plan selected.</div>
       ) : (
         <PlanPicker plans={plans} loading={plansLoading} onSelect={p => loadPlan(p.handle)} />
       )}
