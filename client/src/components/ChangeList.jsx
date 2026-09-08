@@ -9,10 +9,10 @@ const s = {
   cat: { color: "#DAA520", fontWeight: 600 },
 };
 
-export default function ChangeList({ changes }) {
+export default function ChangeList({ changes, isMobile }) {
   if (!changes.length) return null;
   return (
-    <div style={s.wrap}>
+    <div style={{ ...s.wrap, ...(isMobile ? { maxHeight: 90, padding: "8px 14px" } : {}) }}>
       <div style={s.title}>Your Changes ({changes.length})</div>
       {changes.map((c, i) => (
         <div key={i} style={s.item}>

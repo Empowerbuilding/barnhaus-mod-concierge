@@ -26,14 +26,16 @@ export default function Customizer({ plan }) {
   const chat = useModChat(plan);
   const isMobile = useIsMobile();
 
+  const userActivity = chat.messages.filter(m => m.role === "user").length;
+
   if (isMobile) {
     return (
       <div style={s.mobile}>
         <div style={s.mobileTop}>
-          <PlanPanel plan={plan} concepts={chat.concepts} isMobile />
+          <PlanPanel plan={plan} concepts={chat.concepts} isMobile userActivity={userActivity} />
         </div>
         <div style={s.mobileChat}>
-          <ModChat chat={chat} />
+          <ModChat chat={chat} isMobile />
         </div>
       </div>
     );

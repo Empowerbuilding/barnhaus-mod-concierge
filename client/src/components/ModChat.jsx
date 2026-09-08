@@ -19,7 +19,7 @@ const s = {
   completeText: { fontSize: 15, color: "#aaa", lineHeight: 1.6, maxWidth: 380, fontFamily: "'Inter',sans-serif" },
 };
 
-export default function ModChat({ chat }) {
+export default function ModChat({ chat, isMobile }) {
   const {
     messages, isLoading, isComplete, submissionData,
     activeFields, dismissFields, step, changeList,
@@ -45,8 +45,8 @@ export default function ModChat({ chat }) {
 
   return (
     <div style={s.container}>
-      <ProgressTracker step={step} isComplete={isComplete} />
-      <ChangeList changes={changeList} />
+      <ProgressTracker step={step} isComplete={isComplete} isMobile={isMobile} />
+      <ChangeList changes={changeList} isMobile={isMobile} />
 
       {isComplete ? (
         <div style={s.completeScreen}>

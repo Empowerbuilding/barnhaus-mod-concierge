@@ -13,6 +13,9 @@
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body, #root { height: 100%; width: 100%; }
+      @supports (height: 100dvh) {
+        body, #root { height: 100dvh; }
+      }
       body {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         background: #1a1a1a;

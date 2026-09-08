@@ -9,17 +9,17 @@ const s = {
   connector: { width: 18, height: 1, background: "#3a3a3a", margin: "0 6px", flexShrink: 0 },
 };
 
-export default function ProgressTracker({ step, isComplete }) {
+export default function ProgressTracker({ step, isComplete, isMobile }) {
   const currentIdx = isComplete ? STEPS.length : Math.max(0, STEPS.findIndex(x => x.key === step));
 
   return (
-    <div style={s.wrap}>
+    <div style={{ ...s.wrap, ...(isMobile ? { padding: "10px 12px", justifyContent: "center" } : {}) }}>
       {STEPS.map((st, i) => {
         const done = i < currentIdx;
         const active = i === currentIdx;
         return (
           <React.Fragment key={st.key}>
-            {i > 0 && <div style={{ ...s.connector, background: done || active ? "#B8860B" : "#3a3a3a" }} />}
+            {i > 0 && <div style={{ ...s.connector, ...(isMobile ? { width: 10, margin: "0 4px" } : {}), background: done || active ? "#B8860B" : "#3a3a3a" }} />}
             <div style={s.step}>
               <div style={{
                 ...s.dot,
@@ -29,7 +29,9 @@ export default function ProgressTracker({ step, isComplete }) {
               }}>
                 {done ? "✓" : i + 1}
               </div>
-              <span style={{ ...s.label, color: done ? "#B8860B" : active ? "#DAA520" : "#666" }}>{st.label}</span>
+              {(!isMobile || active) && (
+                <span style={{ ...s.label, color: done ? "#B8860B" : active ? "#DAA520" : "#666" }}>{st.label}</span>
+              )}
             </div>
           </React.Fragment>
         );
