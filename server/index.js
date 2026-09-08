@@ -233,21 +233,50 @@ function parseDirectives(aiResponse) {
 // Chat endpoint
 app.post("/api/chat", async (req, res) => {
   try {
-    const { sessionId, message, productHandle, mode } = req.body;
+    const { sessionId, message, productHandle, mode, transcript } = req.body;
 
     if (!sessionId || !message) {
       return res.status(400).json({ error: "sessionId and message required" });
     }
 
     // Get or create session
-    if (!sessions.has(sessionId)) {
+    const isNewSession = !sessions.has(sessionId);
+    if (isNewSession) {
       sessions.set(sessionId, { history: [], partialSaved: false, imageUrls: [], partialDiscordMsgId: null, productContext: null, productHandle: null, mode: null, contactEmail: null });
     }
     const session = sessions.get(sessionId);
     const history = session.history;
 
-    // On first message, fetch product context if handle provided
-    if (history.length === 0 && productHandle && !session.productContext) {
+    // Recovery: if the server restarted mid-conversation (in-memory sessions),
+    // the client resends its transcript — seed history so the AI keeps context.
+    if (isNewSession && Array.isArray(transcript) && transcript.length > 0) {
+      for (const t of transcript) {
+        if ((t?.role === "user" || t?.role === "assistant") && typeof t.text === "string" && t.text.trim()) {
+          history.push({ role: t.role, content: t.text.slice(0, 4000) });
+        }
+      }
+      // history must start with a user turn and strictly alternate for Anthropic —
+      // normalize by dropping a leading assistant greeting and merging repeats
+      while (history.length && history[0].role === "assistant") history.shift();
+      for (let i = history.length - 1; i > 0; i--) {
+        if (history[i].role === history[i - 1].role) {
+          history[i - 1].content += "\n" + history[i].content;
+          history.splice(i, 1);
+        }
+      }
+      // seeded history must end on an assistant turn (the incoming user message
+      // is pushed below) — bridge if the restart ate the last reply
+      if (history.length && history[history.length - 1].role === "user") {
+        history.push({ role: "assistant", content: "(connection interrupted — continuing where we left off)" });
+      }
+      const emailInTranscript = transcript.map(t => t?.text || "").join(" ").match(/[\w.+-]+@[\w-]+\.[\w.]+/);
+      if (emailInTranscript) session.contactEmail = emailInTranscript[0];
+      console.log(`Rebuilt session ${sessionId} from client transcript (${history.length} turns)`);
+    }
+
+    // Fetch product context if handle provided and not yet loaded (first message,
+    // or any message after a server restart — client sends the handle every time)
+    if (productHandle && !session.productContext) {
       try {
         if (mode === "mod") {
           const plan = await getModPlan(productHandle);

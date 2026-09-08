@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 function generateId() {
   return "s_" + Math.random().toString(36).slice(2, 11) + Date.now().toString(36);
@@ -26,6 +26,8 @@ export const CONTACT_FIELDS = [
 export function useModChat(plan) {
   const sessionId = useRef(generateId());
   const [messages, setMessages] = useState([]);
+  const messagesRef = useRef([]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
   const [isLoading, setIsLoading] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [submissionData, setSubmissionData] = useState(null);
@@ -54,7 +56,7 @@ export function useModChat(plan) {
     ));
   }, []);
 
-  const runPreview = useCallback(async (previewId, editPrompt, target, story = 1) => {
+  const runPreview = useCallback(async (previewId, editPrompt, target, story = 1, opts = {}) => {
     const beforeUrl = target === "exterior"
       ? (currentExterior.current || baseExterior)
       : (currentFloorPlans.current[story] || baseFloorPlans[story - 1] || baseFloorPlan);
@@ -97,7 +99,11 @@ export function useModChat(plan) {
           return;
         }
         if (job.status === "error") throw new Error(job.error || "Preview generation failed");
-        if (job.status === "unknown") throw new Error("Preview job expired — please retry");
+        if (job.status === "unknown") {
+          // Server restarted and lost the job — resubmit once automatically
+          if (!opts.retried) return runPreview(previewId, editPrompt, target, story, { retried: true });
+          throw new Error("Preview job expired — please retry");
+        }
       }
       throw new Error("Preview took too long — please retry");
     } catch (err) {
@@ -152,10 +158,15 @@ export function useModChat(plan) {
     }
     setIsLoading(true);
     try {
+      // productHandle + transcript ride along on every message so the server can
+      // rebuild the session if it restarted mid-conversation (in-memory sessions)
+      const transcript = messagesRef.current
+        .filter(m => m.text && !m.preview)
+        .map(m => ({ role: m.role, text: m.text }));
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: sessionId.current, message: text, mode: "mod" }),
+        body: JSON.stringify({ sessionId: sessionId.current, message: text, mode: "mod", productHandle: plan?.handle, transcript }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Chat request failed");
@@ -166,7 +177,7 @@ export function useModChat(plan) {
     } finally {
       setIsLoading(false);
     }
-  }, [isComplete, handleResponse]);
+  }, [isComplete, handleResponse, plan]);
 
   const keepPreview = useCallback((preview) => {
     updatePreview(preview.id, { decided: "kept" });
