@@ -102,31 +102,61 @@ app.get("/api/mod-plans/:handle", async (req, res) => {
 });
 
 // Generate a concept preview via the n8n image-edit webhooks
-app.post("/api/generate-preview", async (req, res) => {
-  try {
-    const { sessionId, editPrompt, target, imageUrl, email } = req.body;
-    if (!editPrompt || !imageUrl) {
-      return res.status(400).json({ error: "editPrompt and imageUrl required" });
-    }
+// Preview generation runs as an async job — generations take 30-100s (pro model +
+// verify-retry), far too long to hold a single HTTP request open from a mobile
+// browser (it aborts). Client gets a jobId back instantly and polls for status.
+const previewJobs = new Map(); // jobId -> { status, result, error, createdAt }
+let previewJobCounter = 0;
 
-    const session = sessionId ? sessions.get(sessionId) : null;
-    const contactEmail = email || session?.contactEmail || null;
+setInterval(() => {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  for (const [id, job] of previewJobs) if (job.createdAt < cutoff) previewJobs.delete(id);
+}, 5 * 60 * 1000).unref();
 
-    console.log(`Generating ${target || "floorplan"} preview: "${editPrompt.slice(0, 100)}"`);
-    const result = target === "exterior"
-      ? await generateExteriorPreview(imageUrl, editPrompt, contactEmail)
-      : await generateFloorPlanPreview(imageUrl, editPrompt);
-
-    if (session) {
-      if (!session.previews) session.previews = [];
-      session.previews.push({ editPrompt, target: target || "floorplan", beforeUrl: imageUrl, afterUrl: result.resultUrl, at: Date.now() });
-    }
-
-    res.json({ success: true, resultUrl: result.resultUrl, verified: result.verified ?? null, notes: result.notes ?? null });
-  } catch (err) {
-    console.error("generate-preview error:", err.message);
-    res.status(502).json({ success: false, error: err.message });
+app.post("/api/generate-preview", (req, res) => {
+  const { sessionId, editPrompt, target, imageUrl, email } = req.body;
+  if (!editPrompt || !imageUrl) {
+    return res.status(400).json({ error: "editPrompt and imageUrl required" });
   }
+
+  const session = sessionId ? sessions.get(sessionId) : null;
+  const contactEmail = email || session?.contactEmail || null;
+
+  const jobId = `pv${++previewJobCounter}-${Date.now()}`;
+  previewJobs.set(jobId, { status: "generating", result: null, error: null, createdAt: Date.now() });
+  console.log(`[${jobId}] Generating ${target || "floorplan"} preview: "${editPrompt.slice(0, 100)}"`);
+
+  (async () => {
+    try {
+      const result = target === "exterior"
+        ? await generateExteriorPreview(imageUrl, editPrompt, contactEmail)
+        : await generateFloorPlanPreview(imageUrl, editPrompt);
+
+      if (session) {
+        if (!session.previews) session.previews = [];
+        session.previews.push({ editPrompt, target: target || "floorplan", beforeUrl: imageUrl, afterUrl: result.resultUrl, at: Date.now() });
+      }
+
+      previewJobs.set(jobId, {
+        status: "done",
+        result: { resultUrl: result.resultUrl, verified: result.verified ?? null, notes: result.notes ?? null },
+        error: null,
+        createdAt: Date.now(),
+      });
+      console.log(`[${jobId}] preview done`);
+    } catch (err) {
+      console.error(`[${jobId}] generate-preview error:`, err.message);
+      previewJobs.set(jobId, { status: "error", result: null, error: err.message, createdAt: Date.now() });
+    }
+  })();
+
+  res.json({ success: true, jobId });
+});
+
+app.get("/api/preview-status/:jobId", (req, res) => {
+  const job = previewJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ status: "unknown" });
+  res.json({ status: job.status, ...(job.result || {}), error: job.error });
 });
 
 // ---------------------------------------------------------------------------

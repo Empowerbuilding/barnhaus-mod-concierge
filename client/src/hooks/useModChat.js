@@ -63,6 +63,7 @@ export function useModChat(plan) {
     updatePreview(previewId, { status: "generating", beforeUrl });
 
     try {
+      // Kick off the job — returns instantly with a jobId; generation takes 30-100s
       const res = await fetch("/api/generate-preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -75,8 +76,27 @@ export function useModChat(plan) {
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Preview generation failed");
-      updatePreview(previewId, { status: "ready", afterUrl: data.resultUrl });
+      if (!res.ok || !data.success || !data.jobId) throw new Error(data.error || "Preview generation failed");
+
+      // Poll for completion — short requests survive mobile browsers/proxies
+      const started = Date.now();
+      while (Date.now() - started < 240_000) {
+        await new Promise(r => setTimeout(r, 3000));
+        let job;
+        try {
+          const sres = await fetch(`/api/preview-status/${data.jobId}`);
+          job = await sres.json();
+        } catch {
+          continue; // transient network blip — keep polling
+        }
+        if (job.status === "done") {
+          updatePreview(previewId, { status: "ready", afterUrl: job.resultUrl });
+          return;
+        }
+        if (job.status === "error") throw new Error(job.error || "Preview generation failed");
+        if (job.status === "unknown") throw new Error("Preview job expired — please retry");
+      }
+      throw new Error("Preview took too long — please retry");
     } catch (err) {
       console.error("Preview error:", err);
       updatePreview(previewId, { status: "error", error: err.message });
