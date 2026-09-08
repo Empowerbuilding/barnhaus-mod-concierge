@@ -354,18 +354,27 @@ export async function chat(messages, floorPlans, product = null, mode = null) {
 
 // Pre-flight spatial sanity check — does this edit make sense on this plan?
 // Runs before any preview job is dispatched to the image editor.
-export async function checkEditFeasibility(imageUrl, editPrompt) {
+// LENIENT by design: the concierge AI already vetted the change with full plan
+// context, and the post-generation QA verify backstops bad results. This only
+// exists to catch clearly impossible edits — when in doubt it allows.
+export async function checkEditFeasibility(imageUrl, editPrompt, allSheets = []) {
   try {
+    const content = [];
+    const extras = (allSheets || []).filter(u => u && u.split("?")[0] !== imageUrl.split("?")[0]).slice(0, 2);
+    extras.forEach((u, i) => {
+      content.push({ type: "text", text: `Context sheet ${i + 1} (other story of the same plan — NOT the one being edited):` });
+      content.push({ type: "image", source: { type: "url", url: u.split("?")[0] } });
+    });
+    content.push({ type: "text", text: "Sheet being edited:" });
+    content.push({ type: "image", source: { type: "url", url: imageUrl.split("?")[0] } });
+    content.push({
+      type: "text",
+      text: `Requested edit to the sheet being edited: "${editPrompt}"\n\nYou are a LENIENT sanity checker. A design assistant with full plan knowledge already approved this edit; your ONLY job is to catch edits that are CLEARLY impossible — like expanding a room into another room that is on the opposite side of the house and not adjacent, or editing a room that does not exist anywhere on this plan.\nRules:\n- Sheets sometimes contain multiple views or both stories side by side — do not reject because of sheet layout confusion\n- Room names may be approximate (mezzanine/loft/bonus, bath/bathroom) — match generously\n- If you are uncertain AT ALL, answer feasible: true\nReply ONLY JSON: {"feasible": true/false, "reason": "one short sentence"}`,
+    });
     const res = await client.messages.create({
       model: "claude-haiku-4-5",
       max_tokens: 150,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "image", source: { type: "url", url: imageUrl.split("?")[0] } },
-          { type: "text", text: `This is a floor plan. Requested edit: "${editPrompt}"\n\nIs this edit spatially coherent on THIS plan? Check: do the referenced rooms exist, are adjacency assumptions correct (e.g. expanding room A into room B requires them to be adjacent), does the location make sense? Reply ONLY JSON: {"feasible": true/false, "reason": "one short sentence"}` },
-        ],
-      }],
+      messages: [{ role: "user", content }],
     });
     const text = res.content.filter(b => b.type === "text").map(b => b.text).join("");
     const m = text.match(/\{[\s\S]*\}/);

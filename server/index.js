@@ -132,7 +132,8 @@ app.post("/api/generate-preview", (req, res) => {
     try {
       // Pre-flight: spatial sanity check against the actual plan image
       if (target !== "exterior") {
-        const check = await checkEditFeasibility(imageUrl, editPrompt);
+        const allSheets = session?.productContext?.floorPlanImages || [];
+        const check = await checkEditFeasibility(imageUrl, editPrompt, allSheets);
         if (!check.feasible) {
           console.log(`[${jobId}] infeasible edit: ${check.reason}`);
           previewJobs.set(jobId, { status: "infeasible", result: null, error: null, reason: check.reason, createdAt: Date.now() });
