@@ -32,7 +32,8 @@ export default function ModChat({ chat, isMobile }) {
 
   useEffect(() => { startConversation(); }, [startConversation]);
   useEffect(() => { messagesEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isLoading]);
-  useEffect(() => { if (!isLoading) setTimeout(() => inputRef.current?.focus(), 100); }, [isLoading]);
+  // Autofocus only on desktop — on mobile it pops the keyboard on page load and buries the UI
+  useEffect(() => { if (!isLoading && !isMobile) setTimeout(() => inputRef.current?.focus(), 100); }, [isLoading, isMobile]);
 
   const handleSend = () => {
     const text = input.trim();

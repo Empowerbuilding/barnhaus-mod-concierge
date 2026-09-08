@@ -376,7 +376,23 @@ app.get("*", (_req, res) => {
 loadFloorPlans().then(() => {
   app.listen(PORT, () => {
     console.log(`Barnhaus Mod Concierge running on port ${PORT} (DRY_RUN=${DRY_RUN})`);
-    // Warm the plan cache
-    fetchModPlans().then(p => console.log(`Loaded ${p.length} mod plans from Shopify`)).catch(e => console.error("Mod plan warmup failed:", e.message));
+    // Warm the plan cache, then pre-classify every plan's floor-plan image in the
+    // background (staggered) so first page load per plan is instant instead of
+    // waiting on a vision call.
+    fetchModPlans()
+      .then(async plans => {
+        console.log(`Loaded ${plans.length} mod plans from Shopify`);
+        for (const p of plans) {
+          try {
+            const full = await getModPlan(p.handle);
+            if (full) await resolveFloorPlanImage(full);
+          } catch (e) {
+            console.error(`Floor-plan warmup failed for ${p.handle}:`, e.message);
+          }
+          await new Promise(r => setTimeout(r, 1500));
+        }
+        console.log("Floor-plan image warmup complete");
+      })
+      .catch(e => console.error("Mod plan warmup failed:", e.message));
   });
 });
