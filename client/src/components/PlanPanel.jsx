@@ -75,7 +75,12 @@ export default function PlanPanel({ plan, concepts, isMobile, userActivity = 0 }
       onClick={() => setZoom(false)}
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out", padding: 20 }}
     >
-      <img src={shownUrl} style={{ maxWidth: "95%", maxHeight: "95%", borderRadius: 8 }} alt="Zoomed plan" />
+      <button
+        onClick={() => setZoom(false)}
+        aria-label="Close image"
+        style={{ position: "absolute", top: 14, right: 14, width: 38, height: 38, borderRadius: "50%", border: "1px solid #555", background: "rgba(30,30,30,0.9)", color: "#fff", fontSize: 17, cursor: "pointer", zIndex: 1001 }}
+      >✕</button>
+      <img src={shownUrl} style={{ maxWidth: "95%", maxHeight: "92%", borderRadius: 8 }} alt="Zoomed plan" />
     </div>
   );
 
