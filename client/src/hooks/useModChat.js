@@ -85,7 +85,7 @@ export function useModChat(plan) {
 
   const handleResponse = useCallback(async (data) => {
     if (data.message) {
-      setMessages(prev => [...prev, { role: "assistant", text: data.message }]);
+      setMessages(prev => [...prev, { role: "assistant", text: data.message, image: data.image || null }]);
     }
     if (data.step) setStep(data.step);
 
@@ -181,7 +181,7 @@ export function useModChat(plan) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to start");
-      setMessages([{ role: "assistant", text: data.message }]);
+      setMessages([{ role: "assistant", text: data.message, image: data.image || null }]);
     } catch (err) {
       setMessages([{ role: "assistant", text: `Welcome! You're looking at the ${plan.shortTitle} — I'll walk you through customizing it. First, what's your name, email, and phone?` }]);
     } finally {

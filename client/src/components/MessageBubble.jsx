@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import FloorPlanCard from "./FloorPlanCard.jsx";
 
 const styles = {
@@ -59,6 +59,7 @@ const styles = {
 export default function MessageBubble({ message }) {
   const isUser = message.role === "user";
   const plans = message.suggestedPlans || [];
+  const [zoom, setZoom] = useState(false);
 
   return (
     <>
@@ -82,9 +83,34 @@ export default function MessageBubble({ message }) {
               alt="Uploaded"
               style={{ maxWidth: 240, maxHeight: 200, borderRadius: 10, display: "block" }}
             />
-          ) : message.text}
+          ) : (
+            <>
+              {message.text}
+              {message.image?.url && (
+                <div style={{ marginTop: 10 }}>
+                  <img
+                    src={message.image.url}
+                    alt={message.image.label || "Plan"}
+                    onClick={() => setZoom(true)}
+                    style={{ width: "100%", maxHeight: 190, objectFit: "contain", borderRadius: 10, background: "#181818", cursor: "zoom-in", display: "block" }}
+                  />
+                  <div style={{ fontSize: 11, color: "#999", marginTop: 4, textAlign: "center", fontFamily: "'Inter',sans-serif" }}>
+                    🔍 Tap to expand
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
+      {zoom && message.image?.url && (
+        <div
+          onClick={() => setZoom(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out", padding: 16 }}
+        >
+          <img src={message.image.url} style={{ maxWidth: "96%", maxHeight: "96%", borderRadius: 8 }} alt="Expanded plan" />
+        </div>
+      )}
       {plans.length > 0 && (
         <div style={styles.plansContainer}>
           {plans.map((plan) => (

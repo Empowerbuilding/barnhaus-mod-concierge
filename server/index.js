@@ -170,7 +170,7 @@ app.get("/api/plans", (_req, res) => {
 
 // Extract every ```json fenced block, parse, and merge recognized directives.
 function parseDirectives(aiResponse) {
-  const out = { suggestedPlans: [], conversationComplete: false, submissionData: null, pendingPreview: null, step: null };
+  const out = { suggestedPlans: [], conversationComplete: false, submissionData: null, pendingPreview: null, step: null, showImage: null };
   const blocks = [...aiResponse.matchAll(/```json\s*\n?([\s\S]*?)```/g)];
   for (const m of blocks) {
     let parsed;
@@ -187,6 +187,7 @@ function parseDirectives(aiResponse) {
       };
     }
     if (typeof parsed?.step === "string") out.step = parsed.step;
+    if (parsed?.show_image === "floorplan" || parsed?.show_image === "exterior") out.showImage = parsed.show_image;
   }
   return out;
 }
@@ -241,9 +242,23 @@ app.post("/api/chat", async (req, res) => {
     history.push({ role: "assistant", content: aiResponse });
 
     // Parse structured directives from the response
-    const { suggestedPlans, conversationComplete, submissionData, pendingPreview, step } = parseDirectives(aiResponse);
+    const { suggestedPlans, conversationComplete, submissionData, pendingPreview, step, showImage } = parseDirectives(aiResponse);
 
-    console.log('AI response length:', aiResponse.length, '| complete:', conversationComplete, '| preview:', !!pendingPreview, '| step:', step);
+    console.log('AI response length:', aiResponse.length, '| complete:', conversationComplete, '| preview:', !!pendingPreview, '| step:', step, '| showImage:', showImage);
+
+    // Resolve show_image directive to an actual image URL for this plan
+    let image = null;
+    if (showImage && session.productContext) {
+      try {
+        if (showImage === "floorplan" && session.mode === "mod") {
+          const url = await resolveFloorPlanImage(session.productContext);
+          image = { url: url || session.productContext.featuredImage, kind: "floorplan", label: "Floor plan" };
+        } else {
+          const url = session.productContext.featuredImage || session.productContext.images?.[0]?.src;
+          if (url) image = { url, kind: "exterior", label: "Exterior" };
+        }
+      } catch { /* non-fatal — just skip the image */ }
+    }
 
     // Clean the response text — remove JSON blocks and any HTML the AI hallucinates
     const cleanText = aiResponse
@@ -264,6 +279,7 @@ app.post("/api/chat", async (req, res) => {
       submissionData,
       pendingPreview,
       step,
+      image,
     });
   } catch (err) {
     console.error("Chat error:", err);
