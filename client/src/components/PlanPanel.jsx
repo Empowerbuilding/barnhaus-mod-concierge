@@ -21,7 +21,7 @@ export default function PlanPanel({ plan, concepts, isMobile, userActivity = 0 }
   const [view, setView] = useState("before"); // before | after
   const [selectedConcept, setSelectedConcept] = useState(null);
   const [zoom, setZoom] = useState(false);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(!isMobile); // mobile starts compact so the chat has room
   const autoCollapsed = useRef(false);
 
   // Mobile: once the user starts chatting, collapse the plan panel to free screen space (once)
