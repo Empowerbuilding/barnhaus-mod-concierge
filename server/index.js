@@ -4,7 +4,7 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import multer from "multer";
-import { chat } from "./claude.js";
+import { chat, checkEditFeasibility } from "./claude.js";
 import { fetchShopifyProduct, fetchModPlans, getModPlan, resolveFloorPlanImage, resolveFloorPlanImages } from "./shopify.js";
 import { generateFloorPlanPreview, generateExteriorPreview } from "./previews.js";
 import { fetchFloorPlans, writeSubmission } from "./supabase.js";
@@ -130,6 +130,16 @@ app.post("/api/generate-preview", (req, res) => {
 
   (async () => {
     try {
+      // Pre-flight: spatial sanity check against the actual plan image
+      if (target !== "exterior") {
+        const check = await checkEditFeasibility(imageUrl, editPrompt);
+        if (!check.feasible) {
+          console.log(`[${jobId}] infeasible edit: ${check.reason}`);
+          previewJobs.set(jobId, { status: "infeasible", result: null, error: null, reason: check.reason, createdAt: Date.now() });
+          return;
+        }
+      }
+
       const result = target === "exterior"
         ? await generateExteriorPreview(imageUrl, editPrompt, contactEmail)
         : await generateFloorPlanPreview(imageUrl, editPrompt);
@@ -158,7 +168,7 @@ app.post("/api/generate-preview", (req, res) => {
 app.get("/api/preview-status/:jobId", (req, res) => {
   const job = previewJobs.get(req.params.jobId);
   if (!job) return res.status(404).json({ status: "unknown" });
-  res.json({ status: job.status, ...(job.result || {}), error: job.error });
+  res.json({ status: job.status, ...(job.result || {}), error: job.error, reason: job.reason || null });
 });
 
 // ---------------------------------------------------------------------------

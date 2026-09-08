@@ -27,7 +27,7 @@ if (typeof document !== "undefined" && !document.getElementById("mod-spin-style"
 export default function PreviewCard({ preview, onKeep, onTryAgain, onSkip, onSaveNoImage, disabled }) {
   const [zoom, setZoom] = useState(null);
   const [showAttempt, setShowAttempt] = useState(false);
-  const { status, editPrompt, target, beforeUrl, afterUrl, decided, error, verified } = preview;
+  const { status, editPrompt, target, beforeUrl, afterUrl, decided, error, verified, infeasible, notes } = preview;
   const failedQA = status === "ready" && verified === false;
 
   return (
@@ -62,7 +62,9 @@ export default function PreviewCard({ preview, onKeep, onTryAgain, onSkip, onSav
           ) : (
             <>
               <div style={{ fontSize: 13, color: "#ccc", background: "#2a2a2a", borderRadius: 8, padding: "10px 12px", marginBottom: 10, lineHeight: 1.5, fontFamily: "'Inter',sans-serif" }}>
-                This one's a complex change — my concept didn't come out accurate enough to show you. I can try again, or just save it for the design team to draft precisely.
+                {infeasible
+                  ? <>This change doesn't quite line up with the plan's actual layout{notes ? ` — ${notes.replace(/\.$/, "").toLowerCase()}` : ""}. I can save it for the design team to work out properly, or you can rephrase it.</>
+                  : <>This one's a complex change — my concept didn't come out accurate enough to show you. I can try again, or just save it for the design team to draft precisely.</>}
               </div>
               {showAttempt && afterUrl && (
                 <div style={{ marginBottom: 10 }}>

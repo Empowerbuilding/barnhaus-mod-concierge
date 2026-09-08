@@ -219,6 +219,9 @@ ${specs ? `Specs: ${specs}` : ""}
 Description: ${desc}
 Tags: ${product.tags || ""}${storyNote}
 
+## You Can SEE the Plan
+The floor-plan sheets and exterior render are attached to the first message. USE THEM. Know where rooms actually are before suggesting anything. Never propose a change that contradicts the sheets (e.g. expanding a room into a space that isn't adjacent to it). When a client's request assumes wrong geometry, gently correct them using what the plan actually shows.
+
 ## Personality
 - Professional, warm, precise — like a design consultant running a structured working session
 - 2-4 sentences max per response. Never more.
@@ -308,12 +311,69 @@ export async function chat(messages, floorPlans, product = null, mode = null) {
     ? buildShopifySystemPrompt(product, floorPlans)
     : buildSystemPrompt(floorPlans);
 
+  // Mod mode: ground the AI in the ACTUAL plan — attach the floor-plan sheets
+  // (and exterior render) to the first user turn so spatial reasoning is real,
+  // not improvised from the text description.
+  let apiMessages = messages;
+  if (mode === "mod" && product) {
+    const imgs = [];
+    (product.floorPlanImages || []).slice(0, 3).forEach((url, i) => {
+      imgs.push({ type: "text", text: `Floor-plan sheet ${i + 1}${(product.floorPlanImages.length > 1) ? ` (story ${i + 1})` : ""}:` });
+      imgs.push({ type: "image", source: { type: "url", url: url.split("?")[0] } });
+    });
+    if (product.featuredImage) {
+      imgs.push({ type: "text", text: "Exterior render:" });
+      imgs.push({ type: "image", source: { type: "url", url: product.featuredImage.split("?")[0] } });
+    }
+    if (imgs.length) {
+      apiMessages = messages.map((m, i) => {
+        if (i === 0 && m.role === "user") {
+          return {
+            role: "user",
+            content: [
+              { type: "text", text: "[Reference images of the plan you are helping customize — study the room positions, entrances, and adjacencies. Ground every suggestion and every editPrompt in what these sheets actually show.]" },
+              ...imgs,
+              { type: "text", text: typeof m.content === "string" ? m.content : "Hello" },
+            ],
+          };
+        }
+        return m;
+      });
+    }
+  }
+
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 1024,
     system: systemPrompt,
-    messages,
+    messages: apiMessages,
   });
 
   return response.content.filter(b => b.type === "text").map(b => b.text).join("");
+}
+
+// Pre-flight spatial sanity check — does this edit make sense on this plan?
+// Runs before any preview job is dispatched to the image editor.
+export async function checkEditFeasibility(imageUrl, editPrompt) {
+  try {
+    const res = await client.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 150,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "url", url: imageUrl.split("?")[0] } },
+          { type: "text", text: `This is a floor plan. Requested edit: "${editPrompt}"\n\nIs this edit spatially coherent on THIS plan? Check: do the referenced rooms exist, are adjacency assumptions correct (e.g. expanding room A into room B requires them to be adjacent), does the location make sense? Reply ONLY JSON: {"feasible": true/false, "reason": "one short sentence"}` },
+        ],
+      }],
+    });
+    const text = res.content.filter(b => b.type === "text").map(b => b.text).join("");
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) return { feasible: true, reason: null };
+    const parsed = JSON.parse(m[0]);
+    return { feasible: parsed.feasible !== false, reason: parsed.reason || null };
+  } catch (err) {
+    console.error("Feasibility check failed (allowing edit):", err.message);
+    return { feasible: true, reason: null }; // fail open — QA verify still backstops
+  }
 }

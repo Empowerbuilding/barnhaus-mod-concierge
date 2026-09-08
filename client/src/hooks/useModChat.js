@@ -98,6 +98,12 @@ export function useModChat(plan) {
           updatePreview(previewId, { status: "ready", afterUrl: job.resultUrl, verified: job.verified ?? null, notes: job.notes ?? null });
           return;
         }
+        if (job.status === "infeasible") {
+          // The change doesn't make spatial sense on this plan — show the graceful
+          // no-image card (reason surfaces in notes)
+          updatePreview(previewId, { status: "ready", afterUrl: null, verified: false, notes: job.reason || null, infeasible: true });
+          return;
+        }
         if (job.status === "error") throw new Error(job.error || "Preview generation failed");
         if (job.status === "unknown") {
           // Server restarted and lost the job — resubmit once automatically
