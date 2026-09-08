@@ -117,7 +117,7 @@ export async function fetchModPlans({ force = false } = {}) {
       beds: specs.beds,
       baths: specs.baths,
       sqft: specs.sqft,
-      floorPlanImage: floorPlanImageCache.has(p.id) ? floorPlanImageCache.get(p.id) : null,
+      floorPlanImage: floorPlanImageCache.has(p.id) ? (floorPlanImageCache.get(p.id)[0] || null) : null,
     };
   });
 
@@ -134,9 +134,26 @@ export async function getModPlan(handle) {
 // ---------------------------------------------------------------------------
 // Floor-plan image selection — one Claude vision call per product, cached.
 // Sends up to 8 product images and asks which are 2D floor plans.
+// Multi-story plans have multiple sheets — we keep them ALL, ordered by story.
+// Cache stores an ARRAY of urls per product id.
 // ---------------------------------------------------------------------------
+
+// Order floor-plan sheets by story inferred from filename (1st → 2nd → 3rd)
+function storyRank(url) {
+  const name = (url.split("/").pop() || "").toLowerCase();
+  if (/3rd|third/.test(name)) return 3;
+  if (/2nd|second|upper|loft/.test(name)) return 2;
+  if (/1st|first|main|ground/.test(name)) return 1;
+  return 1.5; // unknown sits after the identified 1st floor
+}
+
 export async function resolveFloorPlanImage(plan) {
-  if (!plan) return null;
+  const urls = await resolveFloorPlanImages(plan);
+  return urls[0] || null;
+}
+
+export async function resolveFloorPlanImages(plan) {
+  if (!plan) return [];
   if (floorPlanImageCache.has(plan.id)) return floorPlanImageCache.get(plan.id);
 
   // Candidate selection: floor plans are usually named suggestively, smaller,
@@ -154,8 +171,8 @@ export async function resolveFloorPlanImage(plan) {
     return true;
   }).slice(0, 8);
   if (!candidates.length) {
-    floorPlanImageCache.set(plan.id, null);
-    return null;
+    floorPlanImageCache.set(plan.id, []);
+    return [];
   }
 
   try {
@@ -178,27 +195,29 @@ export async function resolveFloorPlanImage(plan) {
     const text = res.content.filter(b => b.type === "text").map(b => b.text).join("");
     const arrMatch = text.match(/\[[\d,\s]*\]/);
     const indexes = arrMatch ? JSON.parse(arrMatch[0]) : [];
-    const first = indexes.find(i => Number.isInteger(i) && i >= 0 && i < candidates.length);
-    const url = first !== undefined ? candidates[first].src : fallbackFloorPlanImage(plan);
-    floorPlanImageCache.set(plan.id, url || null);
+    const valid = indexes.filter(i => Number.isInteger(i) && i >= 0 && i < candidates.length);
+    let urls = [...new Set(valid.map(i => candidates[i].src))];
+    if (!urls.length) urls = fallbackFloorPlanImages(plan);
+    urls.sort((a, b) => storyRank(a) - storyRank(b));
+    floorPlanImageCache.set(plan.id, urls);
     // patch the cached plan list too so /api/mod-plans reflects it
     if (planCache.plans) {
       const cached = planCache.plans.find(p => p.id === plan.id);
-      if (cached) cached.floorPlanImage = url || null;
+      if (cached) cached.floorPlanImage = urls[0] || null;
     }
-    return url || null;
+    return urls;
   } catch (err) {
     console.error(`Floor plan classification failed for ${plan.handle}:`, err.message);
-    const url = fallbackFloorPlanImage(plan);
-    if (url) floorPlanImageCache.set(plan.id, url);
-    return url;
+    const urls = fallbackFloorPlanImages(plan);
+    if (urls.length) floorPlanImageCache.set(plan.id, urls);
+    return urls;
   }
 }
 
 // Filename-based fallback heuristic if vision fails
-function fallbackFloorPlanImage(plan) {
-  const byName = (plan.images || []).find(img =>
-    /floor[\s_-]?plan|layout|1st[\s_-]?(info|floor)|first[\s_-]?floor/i.test(img.src.split("/").pop() || "")
+function fallbackFloorPlanImages(plan) {
+  const byName = (plan.images || []).filter(img =>
+    /floor[\s_-]?plan|layout|(1st|2nd|3rd)[\s_-]?(info|floor)|first[\s_-]?floor|second[\s_-]?floor/i.test(img.src.split("/").pop() || "")
   );
-  return byName?.src || null;
+  return [...new Set(byName.map(i => i.src))].sort((a, b) => storyRank(a) - storyRank(b));
 }

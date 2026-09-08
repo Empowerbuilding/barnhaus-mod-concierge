@@ -16,8 +16,14 @@ const s = {
   thumb: { width: 88, height: 66, objectFit: "cover", borderRadius: 8, cursor: "pointer", flexShrink: 0, background: "#111" },
 };
 
+const STORY_LABELS = ["1st Floor", "2nd Floor", "3rd Floor"];
+
 export default function PlanPanel({ plan, concepts, isMobile, userActivity = 0 }) {
-  const original = plan.floorPlanImage || plan.featuredImage;
+  const floorPlans = plan.floorPlanImages?.length
+    ? plan.floorPlanImages
+    : [plan.floorPlanImage || plan.featuredImage].filter(Boolean);
+  const [storyIdx, setStoryIdx] = useState(0);
+  const original = floorPlans[storyIdx] || floorPlans[0] || plan.featuredImage;
   const [view, setView] = useState("before"); // before | after
   const [selectedConcept, setSelectedConcept] = useState(null);
   const [zoom, setZoom] = useState(false);
@@ -43,6 +49,20 @@ export default function PlanPanel({ plan, concepts, isMobile, userActivity = 0 }
 
   const afterUrl = selectedConcept?.url || (concepts.length ? concepts[concepts.length - 1].url : null);
   const shownUrl = view === "after" && afterUrl ? afterUrl : original;
+
+  const storyTabs = floorPlans.length > 1 && view === "before" && (
+    <div style={{ display: "flex", gap: 6 }}>
+      {floorPlans.map((_, i) => (
+        <button
+          key={i}
+          style={{ ...s.toggle, padding: "5px 12px", ...(storyIdx === i ? s.toggleActive : {}) }}
+          onClick={() => setStoryIdx(i)}
+        >
+          {STORY_LABELS[i] || `Floor ${i + 1}`}
+        </button>
+      ))}
+    </div>
+  );
 
   const specs = [
     plan.beds && `${plan.beds} Bed`,
@@ -89,6 +109,10 @@ export default function PlanPanel({ plan, concepts, isMobile, userActivity = 0 }
           </div>
         )}
 
+        {expanded && storyTabs && (
+          <div style={{ padding: "0 14px 8px" }}>{storyTabs}</div>
+        )}
+
         {expanded && shownUrl && (
           <div style={{ height: 210, padding: "0 14px 12px" }}>
             <img
@@ -118,6 +142,8 @@ export default function PlanPanel({ plan, concepts, isMobile, userActivity = 0 }
           <button style={{ ...s.toggle, ...(view === "after" ? s.toggleActive : {}) }} onClick={() => setView("after")}>Your Concept</button>
         </div>
       )}
+
+      {storyTabs && <div style={{ padding: "0 20px 10px", flexShrink: 0 }}>{storyTabs}</div>}
 
       <div style={s.imgArea}>
         {shownUrl && <img src={shownUrl} alt={plan.shortTitle} style={s.img} onClick={() => setZoom(true)} />}

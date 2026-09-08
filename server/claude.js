@@ -201,6 +201,10 @@ ${planSummaries || "No plans loaded."}`;
 
 export function buildModConciergePrompt(product) {
   const desc = stripHtml(product.body_html || product.description).slice(0, 500);
+  const sheetCount = product.floorPlanImages?.length || 1;
+  const storyNote = sheetCount > 1
+    ? `\nIMPORTANT: This plan has ${sheetCount} floor-plan sheets — story 1 (main floor), story 2 (upper floor)${sheetCount > 2 ? ", story 3" : ""}. When the client discusses upstairs/loft/second-floor changes, target story 2. If it's ambiguous which floor a change applies to, ask before generating a preview.`
+    : "";
   const specs = [
     product.beds && `${product.beds} bed`,
     product.baths && `${product.baths} bath`,
@@ -213,7 +217,7 @@ export function buildModConciergePrompt(product) {
 Name: ${product.title}
 ${specs ? `Specs: ${specs}` : ""}
 Description: ${desc}
-Tags: ${product.tags || ""}
+Tags: ${product.tags || ""}${storyNote}
 
 ## Personality
 - Professional, warm, precise — like a design consultant running a structured working session
@@ -250,9 +254,10 @@ After their answer, output the completion JSON (see below).
 ## Concept Previews — generate_preview protocol
 When the client defines a CONCRETE, specific floor-plan change (e.g. "add a third bedroom off the back", "extend the porch across the full rear wall", "convert the office to a bunk room"), output — after your conversational text — a fenced json block:
 ${FENCE}json
-{"generate_preview": {"editPrompt": "Clear, specific instruction for an image editor, e.g. 'Add a 12x14 third bedroom on the rear left corner of the plan, accessible from the hallway'", "target": "floorplan"}}
+{"generate_preview": {"editPrompt": "Clear, specific instruction for an image editor, e.g. 'Add a 12x14 third bedroom on the rear left corner of the plan, accessible from the hallway'", "target": "floorplan", "story": 1}}
 ${FENCE}
-For EXTERIOR style changes (siding, colors, roof, aesthetic), use "target": "exterior".
+For EXTERIOR style changes (siding, colors, roof, aesthetic), use "target": "exterior" (no story).
+"story" picks which floor-plan sheet gets edited: 1 = main floor (default), 2 = upper floor. Only use story 2 if this plan actually has multiple sheets (see plan info above).
 Rules for previews:
 - Only ONE generate_preview per response
 - Only when the change is concrete enough to draw — if vague, ask a clarifying question first
@@ -262,9 +267,10 @@ Rules for previews:
 ## Show the Plan — show_image protocol
 Whenever you ask the client a question about a specific part of the plan (rooms, layout, kitchen, bath, additions, garage/shop), include — after your conversational text — a fenced json block so the client sees the plan while answering:
 ${FENCE}json
-{"show_image": "floorplan"}
+{"show_image": "floorplan", "story": 1}
 ${FENCE}
-When asking about EXTERIOR style/materials/colors, use "show_image": "exterior" instead.
+When asking about EXTERIOR style/materials/colors, use "show_image": "exterior" instead (no story).
+"story" picks the floor-plan sheet to show: 1 = main floor (default), 2 = upper floor — use 2 when asking about or referencing upstairs spaces on a multi-story plan.
 Rules:
 - ALWAYS include it on the FIRST question of each new category (rooms, additions, kitchen_bath, exterior)
 - Include it again any time you reference something specific on the plan ("the office next to the kitchen", "the rear porch")

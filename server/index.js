@@ -5,7 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import { chat } from "./claude.js";
-import { fetchShopifyProduct, fetchModPlans, getModPlan, resolveFloorPlanImage } from "./shopify.js";
+import { fetchShopifyProduct, fetchModPlans, getModPlan, resolveFloorPlanImage, resolveFloorPlanImages } from "./shopify.js";
 import { generateFloorPlanPreview, generateExteriorPreview } from "./previews.js";
 import { fetchFloorPlans, writeSubmission } from "./supabase.js";
 import { sendN8nWebhook, sendDiscordNotification, writeToCRM, deleteDiscordMessage, notifyVanessa, logModification, triggerLeadSMS, logFormSubmitActivity, notifyLeadAlerts, sendModAckEmail } from "./notify.js";
@@ -80,8 +80,10 @@ app.get("/api/mod-plans/:handle", async (req, res) => {
   try {
     const plan = await getModPlan(req.params.handle);
     if (!plan) return res.status(404).json({ error: "Plan not found" });
-    const floorPlanImage = await resolveFloorPlanImage(plan);
+    const floorPlanImages = await resolveFloorPlanImages(plan);
+    const floorPlanImage = floorPlanImages[0] || null;
     res.json({
+      floorPlanImages,
       id: plan.id,
       handle: plan.handle,
       title: plan.title,
@@ -211,13 +213,19 @@ function parseDirectives(aiResponse) {
       out.submissionData = parsed.submission_data || null;
     }
     if (parsed?.generate_preview?.editPrompt) {
+      const st = parsed.generate_preview.story;
       out.pendingPreview = {
         editPrompt: parsed.generate_preview.editPrompt,
         target: parsed.generate_preview.target === "exterior" ? "exterior" : "floorplan",
+        story: Number.isInteger(st) && st >= 1 && st <= 3 ? st : 1,
       };
     }
     if (typeof parsed?.step === "string") out.step = parsed.step;
-    if (parsed?.show_image === "floorplan" || parsed?.show_image === "exterior") out.showImage = parsed.show_image;
+    if (parsed?.show_image === "floorplan" || parsed?.show_image === "exterior") {
+      out.showImage = parsed.show_image;
+      const st = parsed.story ?? parsed.show_image_story;
+      out.showImageStory = Number.isInteger(st) && st >= 1 && st <= 3 ? st : 1;
+    }
   }
   return out;
 }
@@ -246,8 +254,9 @@ app.post("/api/chat", async (req, res) => {
           if (plan) {
             session.productContext = plan;
             session.mode = "mod";
-            // kick off floor-plan classification in the background (cached for /api/mod-plans/:handle)
-            resolveFloorPlanImage(plan).catch(() => {});
+            // resolve all floor-plan sheets (cached/prewarmed) — the prompt needs the
+            // story count so the AI can target upper floors
+            try { plan.floorPlanImages = await resolveFloorPlanImages(plan); } catch { plan.floorPlanImages = []; }
           }
         } else {
           session.productContext = await fetchShopifyProduct(productHandle);
@@ -272,7 +281,7 @@ app.post("/api/chat", async (req, res) => {
     history.push({ role: "assistant", content: aiResponse });
 
     // Parse structured directives from the response
-    const { suggestedPlans, conversationComplete, submissionData, pendingPreview, step, showImage } = parseDirectives(aiResponse);
+    const { suggestedPlans, conversationComplete, submissionData, pendingPreview, step, showImage, showImageStory } = parseDirectives(aiResponse);
 
     console.log('AI response length:', aiResponse.length, '| complete:', conversationComplete, '| preview:', !!pendingPreview, '| step:', step, '| showImage:', showImage);
 
@@ -281,8 +290,11 @@ app.post("/api/chat", async (req, res) => {
     if (showImage && session.productContext) {
       try {
         if (showImage === "floorplan" && session.mode === "mod") {
-          const url = await resolveFloorPlanImage(session.productContext);
-          image = { url: url || session.productContext.featuredImage, kind: "floorplan", label: "Floor plan" };
+          const sheets = await resolveFloorPlanImages(session.productContext);
+          const idx = Math.min(Math.max((showImageStory || 1) - 1, 0), Math.max(sheets.length - 1, 0));
+          const url = sheets[idx] || sheets[0];
+          const label = sheets.length > 1 ? ["1st floor plan", "2nd floor plan", "3rd floor plan"][idx] : "Floor plan";
+          image = { url: url || session.productContext.featuredImage, kind: "floorplan", label };
         } else {
           const url = session.productContext.featuredImage || session.productContext.images?.[0]?.src;
           if (url) image = { url, kind: "exterior", label: "Exterior" };

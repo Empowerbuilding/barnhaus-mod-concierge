@@ -37,10 +37,13 @@ export function useModChat(plan) {
   const contactEmail = useRef(null);
   const previewCounter = useRef(0);
 
-  // Working image state — floor-plan edits chain off the latest kept concept
-  const currentFloorPlan = useRef(null);
+  // Working image state — floor-plan edits chain off the latest kept concept, PER STORY
+  const currentFloorPlans = useRef({}); // story (1-based) -> latest kept concept url
   const currentExterior = useRef(null);
-  const baseFloorPlan = plan?.floorPlanImage || plan?.featuredImage || null;
+  const baseFloorPlans = plan?.floorPlanImages?.length
+    ? plan.floorPlanImages
+    : (plan?.floorPlanImage ? [plan.floorPlanImage] : (plan?.featuredImage ? [plan.featuredImage] : []));
+  const baseFloorPlan = baseFloorPlans[0] || null;
   const baseExterior = plan?.featuredImage || null;
 
   const stepLabel = (key) => STEPS.find(s => s.key === key)?.label || "Change";
@@ -51,10 +54,10 @@ export function useModChat(plan) {
     ));
   }, []);
 
-  const runPreview = useCallback(async (previewId, editPrompt, target) => {
+  const runPreview = useCallback(async (previewId, editPrompt, target, story = 1) => {
     const beforeUrl = target === "exterior"
       ? (currentExterior.current || baseExterior)
-      : (currentFloorPlan.current || baseFloorPlan);
+      : (currentFloorPlans.current[story] || baseFloorPlans[story - 1] || baseFloorPlan);
 
     if (!beforeUrl) {
       updatePreview(previewId, { status: "error", error: "No plan image available to edit" });
@@ -101,7 +104,7 @@ export function useModChat(plan) {
       console.error("Preview error:", err);
       updatePreview(previewId, { status: "error", error: err.message });
     }
-  }, [baseExterior, baseFloorPlan, updatePreview]);
+  }, [baseExterior, baseFloorPlan, baseFloorPlans, updatePreview]);
 
   const handleResponse = useCallback(async (data) => {
     if (data.message) {
@@ -111,12 +114,12 @@ export function useModChat(plan) {
 
     if (data.pendingPreview) {
       const id = ++previewCounter.current;
-      const { editPrompt, target } = data.pendingPreview;
+      const { editPrompt, target, story = 1 } = data.pendingPreview;
       setMessages(prev => [...prev, {
         role: "assistant",
-        preview: { id, status: "generating", editPrompt, target, beforeUrl: null, afterUrl: null, decided: null },
+        preview: { id, status: "generating", editPrompt, target, story, beforeUrl: null, afterUrl: null, decided: null },
       }]);
-      runPreview(id, editPrompt, target);
+      runPreview(id, editPrompt, target, story);
     }
 
     if (data.conversationComplete && data.submissionData) {
@@ -168,7 +171,7 @@ export function useModChat(plan) {
   const keepPreview = useCallback((preview) => {
     updatePreview(preview.id, { decided: "kept" });
     if (preview.target === "exterior") currentExterior.current = preview.afterUrl;
-    else currentFloorPlan.current = preview.afterUrl;
+    else currentFloorPlans.current[preview.story || 1] = preview.afterUrl;
 
     setChangeList(prev => [...prev, {
       category: stepLabel(step),
@@ -181,7 +184,7 @@ export function useModChat(plan) {
 
   const tryAgainPreview = useCallback((preview) => {
     updatePreview(preview.id, { status: "generating", afterUrl: null, decided: null });
-    runPreview(preview.id, preview.editPrompt, preview.target);
+    runPreview(preview.id, preview.editPrompt, preview.target, preview.story || 1);
   }, [runPreview, updatePreview]);
 
   const skipPreview = useCallback((preview) => {
@@ -217,7 +220,7 @@ export function useModChat(plan) {
     messages, isLoading, isComplete, submissionData,
     activeFields, dismissFields,
     step, changeList, concepts,
-    baseFloorPlan, baseExterior,
+    baseFloorPlan, baseFloorPlans, baseExterior,
     sendMessage, startConversation,
     keepPreview, tryAgainPreview, skipPreview,
   };
