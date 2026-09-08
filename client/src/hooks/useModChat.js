@@ -203,6 +203,18 @@ export function useModChat(plan) {
     sendMessage(`[Client skipped that concept for: ${preview.editPrompt}. Note it without a preview if they still want the change, and continue.]`, { hidden: true });
   }, [sendMessage, updatePreview]);
 
+  // QA flagged the concept as inaccurate — record the change WITHOUT the image
+  // (no chaining off a bad concept, nothing added to the plan panel)
+  const saveWithoutPreview = useCallback((preview) => {
+    updatePreview(preview.id, { decided: "saved" });
+    setChangeList(prev => [...prev, {
+      category: stepLabel(step),
+      description: preview.editPrompt,
+      conceptUrl: "",
+    }]);
+    sendMessage(`[The preview for "${preview.editPrompt}" wasn't accurate, so the client saved the change without a concept image. It's in their change list — acknowledge briefly and continue.]`, { hidden: true });
+  }, [sendMessage, step, updatePreview]);
+
   const startConversation = useCallback(async () => {
     if (hasGreeted.current || !plan) return;
     hasGreeted.current = true;
@@ -233,6 +245,6 @@ export function useModChat(plan) {
     step, changeList, concepts,
     baseFloorPlan, baseFloorPlans, baseExterior,
     sendMessage, startConversation,
-    keepPreview, tryAgainPreview, skipPreview,
+    keepPreview, tryAgainPreview, skipPreview, saveWithoutPreview,
   };
 }

@@ -24,9 +24,11 @@ if (typeof document !== "undefined" && !document.getElementById("mod-spin-style"
   document.head.appendChild(style);
 }
 
-export default function PreviewCard({ preview, onKeep, onTryAgain, onSkip, disabled }) {
+export default function PreviewCard({ preview, onKeep, onTryAgain, onSkip, onSaveNoImage, disabled }) {
   const [zoom, setZoom] = useState(null);
+  const [showAttempt, setShowAttempt] = useState(false);
   const { status, editPrompt, target, beforeUrl, afterUrl, decided, error, verified } = preview;
+  const failedQA = status === "ready" && verified === false;
 
   return (
     <div style={s.card}>
@@ -50,7 +52,40 @@ export default function PreviewCard({ preview, onKeep, onTryAgain, onSkip, disab
         </>
       )}
 
-      {status === "ready" && (
+      {status === "ready" && failedQA && decided !== "kept" ? (
+        /* QA says the edit didn't land — don't lead with a wrong image */
+        <>
+          {decided === "saved" ? (
+            <div style={{ ...s.decided, color: "#7ec97e" }}>✓ Change saved — the design team will draft it precisely</div>
+          ) : decided === "skipped" ? (
+            <div style={{ ...s.decided, color: "#888" }}>Concept skipped</div>
+          ) : (
+            <>
+              <div style={{ fontSize: 13, color: "#ccc", background: "#2a2a2a", borderRadius: 8, padding: "10px 12px", marginBottom: 10, lineHeight: 1.5, fontFamily: "'Inter',sans-serif" }}>
+                This one's a complex change — my concept didn't come out accurate enough to show you. I can try again, or just save it for the design team to draft precisely.
+              </div>
+              {showAttempt && afterUrl && (
+                <div style={{ marginBottom: 10 }}>
+                  <img src={afterUrl} style={{ ...s.img, opacity: 0.85 }} alt="Attempt" onClick={() => setZoom(afterUrl)} />
+                </div>
+              )}
+              <div style={s.btnRow}>
+                <button style={s.keepBtn} onClick={() => (onSaveNoImage || onSkip)(preview)} disabled={disabled}>✓ Save Change</button>
+                <button style={s.altBtn} onClick={() => onTryAgain(preview)} disabled={disabled}>↻ Try Again</button>
+                <button style={s.altBtn} onClick={() => onSkip(preview)} disabled={disabled}>Skip</button>
+              </div>
+              {afterUrl && (
+                <div
+                  onClick={() => setShowAttempt(v => !v)}
+                  style={{ fontSize: 11, color: "#777", marginTop: 8, cursor: "pointer", textAlign: "center", fontFamily: "'Inter',sans-serif", textDecoration: "underline" }}
+                >
+                  {showAttempt ? "hide the attempt" : "view the attempt anyway"}
+                </div>
+              )}
+            </>
+          )}
+        </>
+      ) : status === "ready" && (
         <>
           <div style={s.imgRow}>
             {beforeUrl && (
@@ -64,11 +99,6 @@ export default function PreviewCard({ preview, onKeep, onTryAgain, onSkip, disab
               <img src={afterUrl} style={{ ...s.img, border: "1px solid #B8860B55" }} alt="After" onClick={() => setZoom(afterUrl)} />
             </div>
           </div>
-          {verified === false && !decided && (
-            <div style={{ fontSize: 12, color: "#d9a94a", background: "#B8860B18", border: "1px solid #B8860B44", borderRadius: 8, padding: "8px 10px", marginBottom: 10, lineHeight: 1.45, fontFamily: "'Inter',sans-serif" }}>
-              ⚠️ This concept may not fully capture the change — complex layout shifts are hard to preview. Your request is saved either way, and the design team will draft it precisely.
-            </div>
-          )}
           {decided === "kept" ? (
             <div style={{ ...s.decided, color: "#7ec97e" }}>✓ Change kept — added to your list</div>
           ) : decided === "skipped" ? (

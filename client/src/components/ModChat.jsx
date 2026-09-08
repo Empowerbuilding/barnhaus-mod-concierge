@@ -23,7 +23,7 @@ export default function ModChat({ chat, isMobile }) {
   const {
     messages, isLoading, isComplete, submissionData,
     activeFields, dismissFields, step, changeList,
-    sendMessage, startConversation, keepPreview, tryAgainPreview, skipPreview,
+    sendMessage, startConversation, keepPreview, tryAgainPreview, skipPreview, saveWithoutPreview,
   } = chat;
 
   const [input, setInput] = useState("");
@@ -69,6 +69,7 @@ export default function ModChat({ chat, isMobile }) {
                   onKeep={keepPreview}
                   onTryAgain={tryAgainPreview}
                   onSkip={skipPreview}
+                  onSaveNoImage={saveWithoutPreview}
                   disabled={isLoading}
                 />
               ) : (
