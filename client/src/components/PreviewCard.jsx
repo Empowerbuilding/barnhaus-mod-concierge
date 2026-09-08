@@ -26,7 +26,7 @@ if (typeof document !== "undefined" && !document.getElementById("mod-spin-style"
 
 export default function PreviewCard({ preview, onKeep, onTryAgain, onSkip, disabled }) {
   const [zoom, setZoom] = useState(null);
-  const { status, editPrompt, target, beforeUrl, afterUrl, decided, error } = preview;
+  const { status, editPrompt, target, beforeUrl, afterUrl, decided, error, verified } = preview;
 
   return (
     <div style={s.card}>
@@ -64,6 +64,11 @@ export default function PreviewCard({ preview, onKeep, onTryAgain, onSkip, disab
               <img src={afterUrl} style={{ ...s.img, border: "1px solid #B8860B55" }} alt="After" onClick={() => setZoom(afterUrl)} />
             </div>
           </div>
+          {verified === false && !decided && (
+            <div style={{ fontSize: 12, color: "#d9a94a", background: "#B8860B18", border: "1px solid #B8860B44", borderRadius: 8, padding: "8px 10px", marginBottom: 10, lineHeight: 1.45, fontFamily: "'Inter',sans-serif" }}>
+              ⚠️ This concept may not fully capture the change — complex layout shifts are hard to preview. Your request is saved either way, and the design team will draft it precisely.
+            </div>
+          )}
           {decided === "kept" ? (
             <div style={{ ...s.decided, color: "#7ec97e" }}>✓ Change kept — added to your list</div>
           ) : decided === "skipped" ? (

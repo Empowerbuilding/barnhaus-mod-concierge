@@ -95,7 +95,7 @@ export function useModChat(plan) {
           continue; // transient network blip — keep polling
         }
         if (job.status === "done") {
-          updatePreview(previewId, { status: "ready", afterUrl: job.resultUrl });
+          updatePreview(previewId, { status: "ready", afterUrl: job.resultUrl, verified: job.verified ?? null, notes: job.notes ?? null });
           return;
         }
         if (job.status === "error") throw new Error(job.error || "Preview generation failed");
