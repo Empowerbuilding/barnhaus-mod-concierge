@@ -1,9 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { geminiChat } from "./gemini.js";
 
 const DOMAIN = process.env.SHOPIFY_STORE_DOMAIN || "sf43pj-td.myshopify.com";
 const API_VERSION = "2026-04";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ---------------------------------------------------------------------------
 // Single product fetch (legacy — used by the original concierge chat flow)
@@ -186,13 +184,7 @@ export async function resolveFloorPlanImages(plan) {
       text: `These are product images for the house plan "${plan.title}". Which image indexes are 2D FLOOR PLANS (top-down room layout drawings with walls, rooms, and dimensions — NOT 3D renderings, NOT exterior photos, NOT elevation drawings)? Reply with ONLY a JSON array of the matching indexes, e.g. [5,6]. If none, reply [].`,
     });
 
-    const res = await anthropic.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 50,
-      messages: [{ role: "user", content }],
-    });
-
-    const text = res.content.filter(b => b.type === "text").map(b => b.text).join("");
+    const text = await geminiChat({ messages: [{ role: "user", content }], maxTokens: 50 });
     const arrMatch = text.match(/\[[\d,\s]*\]/);
     const indexes = arrMatch ? JSON.parse(arrMatch[0]) : [];
     const valid = indexes.filter(i => Number.isInteger(i) && i >= 0 && i < candidates.length);

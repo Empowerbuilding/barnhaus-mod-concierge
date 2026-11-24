@@ -1,6 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { geminiChat } from "./gemini.js";
 
 const FENCE = "```";
 
@@ -342,14 +340,9 @@ export async function chat(messages, floorPlans, product = null, mode = null) {
     }
   }
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages: apiMessages,
-  });
-
-  return response.content.filter(b => b.type === "text").map(b => b.text).join("");
+  // Gemini via OpenAI-compat endpoint — see server/gemini.js (handles the
+  // Anthropic-style image blocks in apiMessages). Model + key via env.
+  return geminiChat({ system: systemPrompt, messages: apiMessages, maxTokens: 1024 });
 }
 
 // Pre-flight spatial sanity check — does this edit make sense on this plan?
@@ -371,12 +364,7 @@ export async function checkEditFeasibility(imageUrl, editPrompt, allSheets = [])
       type: "text",
       text: `Requested edit to the sheet being edited: "${editPrompt}"\n\nYou are a LENIENT sanity checker. A design assistant with full plan knowledge already approved this edit; your ONLY job is to catch edits that are CLEARLY impossible — like expanding a room into another room that is on the opposite side of the house and not adjacent, or editing a room that does not exist anywhere on this plan.\nRules:\n- Sheets sometimes contain multiple views or both stories side by side — do not reject because of sheet layout confusion\n- Room names may be approximate (mezzanine/loft/bonus, bath/bathroom) — match generously\n- If you are uncertain AT ALL, answer feasible: true\nReply ONLY JSON: {"feasible": true/false, "reason": "one short sentence"}`,
     });
-    const res = await client.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 150,
-      messages: [{ role: "user", content }],
-    });
-    const text = res.content.filter(b => b.type === "text").map(b => b.text).join("");
+    const text = await geminiChat({ messages: [{ role: "user", content }], maxTokens: 150 });
     const m = text.match(/\{[\s\S]*\}/);
     if (!m) return { feasible: true, reason: null };
     const parsed = JSON.parse(m[0]);
