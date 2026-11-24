@@ -49,6 +49,7 @@ function normalizeContentSync(content) {
 // ("Cannot fetch content from the provided URL"), so URL images are
 // downloaded here and inlined as base64 data URLs instead.
 async function inlineUrlImages(parts) {
+  if (typeof parts === "string" || !Array.isArray(parts)) return parts;
   const out = [];
   for (const part of parts) {
     if (part.type === "image_url" && part.image_url?.url && !part.image_url.url.startsWith("data:")) {
