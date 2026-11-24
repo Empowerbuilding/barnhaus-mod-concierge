@@ -23,7 +23,7 @@ export function geminiConfigured() {
   return Boolean(GEMINI_API_KEY);
 }
 
-function normalizeContent(content) {
+function normalizeContentSync(content) {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return String(content ?? "");
   const parts = [];
@@ -45,13 +45,40 @@ function normalizeContent(content) {
   return parts;
 }
 
+// Shopify CDN (cdn.shopify.com) blocks Google's server-side image fetcher
+// ("Cannot fetch content from the provided URL"), so URL images are
+// downloaded here and inlined as base64 data URLs instead.
+async function inlineUrlImages(parts) {
+  const out = [];
+  for (const part of parts) {
+    if (part.type === "image_url" && part.image_url?.url && !part.image_url.url.startsWith("data:")) {
+      try {
+        const res = await fetch(part.image_url.url, { signal: AbortSignal.timeout(20000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const buf = Buffer.from(await res.arrayBuffer());
+        const mime = (res.headers.get("content-type") || "image/jpeg").split(";")[0];
+        out.push({ type: "image_url", image_url: { url: `data:${mime};base64,${buf.toString("base64")}` } });
+      } catch (err) {
+        throw new Error(`image fetch failed for ${String(part.image_url.url).slice(0, 90)}: ${err.message}`);
+      }
+    } else {
+      out.push(part);
+    }
+  }
+  return out;
+}
+
+async function normalizeContent(content) {
+  return inlineUrlImages(normalizeContentSync(content));
+}
+
 export async function geminiChat({ system, messages, maxTokens = 1024 }) {
   if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY env var not set on concierge server");
 
   const oaiMessages = [];
   if (system) oaiMessages.push({ role: "system", content: system });
   for (const m of messages || []) {
-    oaiMessages.push({ role: m.role, content: normalizeContent(m.content) });
+    oaiMessages.push({ role: m.role, content: await normalizeContent(m.content) });
   }
 
   const res = await fetch(GEMINI_URL, {
